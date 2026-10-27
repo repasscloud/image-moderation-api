@@ -1,0 +1,178 @@
+{
+  "document_version": 1,
+  "service_version": "1.0.0",
+  "reviewed_date": "2026-10-28",
+  "purpose": "Interpretation metadata, not runtime moderation policy or proof of image safety.",
+  "overall_status": {
+    "completed": "All requested engines completed; disabled engines may still be present.",
+    "partial": "At least one requested engine completed and at least one failed.",
+    "failed": "No requested engine completed."
+  },
+  "engine_status": {
+    "completed": "Result available; inspect engine fields.",
+    "failed": "Check unknown: attempted without a usable result.",
+    "disabled": "Not checked: configuration disabled the engine.",
+    "not_requested": "Not checked: enabled engine excluded by selection."
+  },
+  "nudenet": {
+    "version": "3.4.2",
+    "labels": {
+      "FEMALE_GENITALIA_EXPOSED": {
+        "consumer_group": "genital_anus_exposure"
+      },
+      "MALE_GENITALIA_EXPOSED": {
+        "consumer_group": "genital_anus_exposure"
+      },
+      "ANUS_EXPOSED": {
+        "consumer_group": "genital_anus_exposure"
+      },
+      "FEMALE_BREAST_EXPOSED": {
+        "consumer_group": "breast_exposure"
+      },
+      "BUTTOCKS_EXPOSED": {
+        "consumer_group": "buttocks_exposure"
+      },
+      "MALE_BREAST_EXPOSED": {
+        "consumer_group": "bare_chest"
+      },
+      "FEMALE_GENITALIA_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "FEMALE_BREAST_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "BUTTOCKS_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "ANUS_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "BELLY_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "ARMPITS_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "FEET_COVERED": {
+        "consumer_group": "covered_anatomy"
+      },
+      "BELLY_EXPOSED": {
+        "consumer_group": "other_anatomy"
+      },
+      "ARMPITS_EXPOSED": {
+        "consumer_group": "other_anatomy"
+      },
+      "FEET_EXPOSED": {
+        "consumer_group": "other_anatomy"
+      },
+      "FACE_FEMALE": {
+        "consumer_group": "face"
+      },
+      "FACE_MALE": {
+        "consumer_group": "face"
+      }
+    },
+    "group_names_are": "Documentation-only policy groupings, not extra model/API labels.",
+    "score": "Per-detection model confidence; not calibrated image-level nudity probability.",
+    "box_format": [
+      "x",
+      "y",
+      "width",
+      "height"
+    ],
+    "box_units": "Decoded/oriented image pixels, top-left origin.",
+    "consumer_rule": "On completed valid results, any caller-selected class score >= its caller-supplied threshold is a policy-scoped signal.",
+    "default_consumer_threshold": null,
+    "threshold_requirement": "Caller must select/calibrate/version thresholds and classes; no service-provided calibrated nudity policy.",
+    "negative_state": "no_signal_detected",
+    "unavailable_state": "unknown"
+  },
+  "nsfw": {
+    "version": "0.1.2",
+    "classification_type": "boolean",
+    "classification_alias": "is_nsfw",
+    "probabilities_shape": "Single-element list of score dictionaries.",
+    "scores": {
+      "neutral": "P(neutral)",
+      "low": "P(low)+P(medium)+P(high)",
+      "medium": "P(medium)+P(high)",
+      "high": "P(high)"
+    },
+    "default_boolean_rule": "medium >= 0.5",
+    "not_supported": [
+      "anatomical nudity conclusion",
+      "age determination",
+      "CSAM classification",
+      "exclusive argmax over cumulative scores"
+    ]
+  },
+  "arachnid": {
+    "classification_type": "string",
+    "classifications": {
+      "csam": "known_csam_match",
+      "harmful-abusive-material": "known_harmful_abusive_match",
+      "no-known-match": "no_known_match",
+      "test": "test_result"
+    },
+    "unknown_classification_state": "unknown_classification",
+    "unavailable_state": "unknown",
+    "match_types": [
+      "exact",
+      "near",
+      null
+    ],
+    "pdq_quality": "Hash-suitability metric, not a CSAM confidence or severity score.",
+    "negative_meaning": "No known database match returned; novel/unmatched CSAM cannot be excluded.",
+    "local_negatives_override_match": false
+  },
+  "error_codes": {
+    "unauthorized": 401,
+    "invalid_request": 400,
+    "invalid_multipart": 400,
+    "invalid_image": 400,
+    "disconnected": 400,
+    "upload_timeout": 408,
+    "request_too_large": 413,
+    "image_too_large": 413,
+    "pixel_limit": 413,
+    "dimension_limit": 413,
+    "unsupported_format": 415,
+    "animated_image": 415,
+    "image_encoding_unsupported": 415,
+    "validation_error": 422,
+    "invalid_upload": 422,
+    "invalid_engine": 422,
+    "engine_disabled": 422,
+    "invalid_image_url": 422,
+    "image_host_not_allowed": 422,
+    "image_destination_blocked": 422,
+    "image_download_failed": 502,
+    "busy": 503,
+    "no_engines": 503,
+    "scan_timeout": 504,
+    "image_download_timeout": 504,
+    "internal_error": 500,
+    "http_error": "varies",
+    "engine_unavailable": "per_engine",
+    "inference_failed": "per_engine",
+    "upstream_timeout": "per_engine",
+    "upstream_rate_limited": "per_engine",
+    "upstream_error": "per_engine",
+    "upstream_response_invalid": "per_engine"
+  },
+  "prohibited_inferences": [
+    "overall completed means safe",
+    "disabled or failed means a negative check",
+    "any EXPOSED suffix means policy-defined nudity",
+    "NSFW positive proves nudity or CSAM",
+    "face or anatomical gender label establishes age",
+    "no-known-match proves absence of CSAM",
+    "PDQ exact proves uploaded-file cryptographic identity"
+  ],
+  "sources": {
+    "nudenet": "https://github.com/notAI-tech/NudeNet/blob/v3/README.md",
+    "nsfw": "https://github.com/freepik-company/nsfw_image_detector/blob/main/nsfw_image_detector/detector.py",
+    "shield": "https://shield.projectarachnid.com/openapi.json",
+    "pdq": "https://github.com/facebook/ThreatExchange/tree/main/pdq"
+  }
+}

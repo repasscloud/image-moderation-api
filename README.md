@@ -74,6 +74,21 @@ means disabled. A single credential logs a warning and disables Shield while loc
 engines continue. Disabled Shield creates no HTTP client and makes no network calls.
 No credentials are bundled; `.env` is ignored by Git and excluded from Docker builds.
 
+## Interpret results: nudity and known CSAM
+
+Start with the [complete results reference](docs/results-reference.md). It explains
+every engine field, all 18 NudeNet classes, cumulative Freepik scores, every Shield
+classification, errors and unknown/not-checked cases. Use the
+[machine-readable catalogue](docs/results-reference.json) and
+[LLM interpretation instructions](docs/llm-results-instructions.md) for integrations.
+
+For nudity, configure the consuming application's selected NudeNet classes and
+validated score thresholds; a match is a policy-scoped signal. Freepik's NSFW boolean
+is a separate image-level prediction. For known CSAM, read a **completed** Shield
+result with classification `csam`; local-model negatives do not override it.
+`no-known-match`, disabled or failed checks never establish that an image is safe.
+This service continues to return raw analysis, not new moderation decisions.
+
 ## API contract
 
 The application's typed schemas and route metadata generate `/openapi.json`.

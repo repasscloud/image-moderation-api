@@ -85,3 +85,19 @@ authentication, admission and in-memory validation as uploads.
   scan timeouts retain admission while native inference finishes.
 - Live customer-signed Worker URLs, authenticated Shield and AMD64 execution remain
   unverified. No downloaded image was sent to Shield or written to persistent disk.
+
+## Results interpretation documentation — 28 October 2026
+
+- Added a human-readable field/status/error reference, all 18 NudeNet labels and
+  explicit consumer nudity policy mechanics, separate Freepik cumulative scores,
+  and all current Shield classifications/unknown outcomes.
+- Added a machine-readable catalogue and copyable LLM instructions that keep
+  observed results, application thresholds and unknown checks separate.
+- Compared the catalogue with the installed NudeNet label list and Freepik enum;
+  all labels/categories match. Compared engine/overall status enums and 32 literal
+  raised error codes against the application; all are documented, along with the
+  generic inference_failed fallback.
+- Full suite: 132 passed, 2 opt-in integration tests skipped. No runtime behavior,
+  model weights, endpoint schemas or image-handling paths changed in this update.
+- The example 0.50 consumer cutoff is instructional, not a calibrated commercial
+  operating point. Live Shield verification remains outside this documentation check.
