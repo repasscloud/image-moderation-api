@@ -1,0 +1,41 @@
+{
+    "scan_id": "5565126a-0478-493b-b573-0a3499ed47be",
+    "status": "completed",
+    "filename": "synthetic.png",
+    "processing_time_ms": 3995.045,
+    "results": {
+        "nudenet": {
+            "detections": [
+                {
+                    "class": "BUTTOCKS_EXPOSED",
+                    "score": 0.4343108832836151,
+                    "box": [
+                        99,
+                        22,
+                        140,
+                        106
+                    ]
+                }
+            ],
+            "status": "completed",
+            "inference_time_ms": 271.275
+        },
+        "nsfw": {
+            "classification": false,
+            "is_nsfw": false,
+            "probabilities": [
+                {
+                    "high": 0.0002644307096488774,
+                    "medium": 0.00045298109762370586,
+                    "low": 0.0006853829836472869,
+                    "neutral": 0.999314546585083
+                }
+            ],
+            "status": "completed",
+            "inference_time_ms": 3702.299
+        },
+        "arachnid": {
+            "status": "disabled"
+        }
+    }
+}

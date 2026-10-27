@@ -1,0 +1,41 @@
+services:
+  moderation-api:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      API_KEY: ${API_KEY:-}
+      ARACHNID_API_USERNAME: ${ARACHNID_API_USERNAME:-}
+      ARACHNID_API_PASSWORD: ${ARACHNID_API_PASSWORD:-}
+      HOST: 0.0.0.0
+      PORT: 8080
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENABLE_NUDENET: ${ENABLE_NUDENET:-true}
+      ENABLE_NSFW: ${ENABLE_NSFW:-true}
+      MAX_IMAGE_SIZE_MB: ${MAX_IMAGE_SIZE_MB:-20}
+      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-40000000}
+      MAX_IMAGE_DIMENSION: ${MAX_IMAGE_DIMENSION:-8192}
+      MAX_CONCURRENT_SCANS: ${MAX_CONCURRENT_SCANS:-1}
+      UPLOAD_TIMEOUT_SECONDS: ${UPLOAD_TIMEOUT_SECONDS:-30}
+      SCAN_TIMEOUT_SECONDS: ${SCAN_TIMEOUT_SECONDS:-120}
+      ARACHNID_TIMEOUT_SECONDS: ${ARACHNID_TIMEOUT_SECONDS:-15}
+      NUDENET_CONFIDENCE_THRESHOLD: ${NUDENET_CONFIDENCE_THRESHOLD:-0}
+      NSFW_DTYPE: ${NSFW_DTYPE:-float32}
+      ENABLE_DOCS: ${ENABLE_DOCS:-true}
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
+    volumes:
+      - model-cache:/app/model-cache
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 128
+    stop_grace_period: 10m
+volumes:
+  model-cache:

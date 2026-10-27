@@ -1,0 +1,12 @@
+[project]
+name = "image-moderation-api"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+description = "Standalone CPU image analysis API"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
