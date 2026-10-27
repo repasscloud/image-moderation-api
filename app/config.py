@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -26,6 +26,46 @@ class Settings(BaseSettings):
     model_cache: Path = Path("model-cache")
     nsfw_dtype: Literal["float32", "bfloat16"] = "float32"
     enable_docs: bool = True
+    allowed_image_hosts: Annotated[tuple[str, ...], NoDecode] = ()
+    url_download_timeout_seconds: float = Field(30, gt=0, le=120)
+
+    @field_validator("allowed_image_hosts", mode="before")
+    @classmethod
+    def validate_hosts(cls, value: str | tuple[str, ...]) -> tuple[str, ...]:
+        import ipaddress
+        import re
+
+        if isinstance(value, (tuple, list)):
+            value = ",".join(value)
+        if not isinstance(value, str):
+            raise ValueError("Invalid allowed image hostnames")
+        if not value.strip():
+            return ()
+        hosts = []
+        for part in value.split(","):
+            host = part.strip().lower()
+            try:
+                host = host.encode("idna").decode("ascii")
+            except UnicodeError:
+                raise ValueError("Invalid allowed image hostname") from None
+            if (
+                len(host) > 253
+                or "." not in host
+                or any(
+                    not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                    for label in host.split(".")
+                )
+            ):
+                raise ValueError(
+                    "Use comma-separated exact DNS hostnames without schemes, ports or wildcards"
+                )
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                hosts.append(host)
+            else:
+                raise ValueError("Use DNS hostnames, not IP addresses")
+        return tuple(dict.fromkeys(hosts))
 
     @field_validator("api_key", "arachnid_api_username", "arachnid_api_password", mode="before")
     @classmethod

@@ -47,6 +47,19 @@ class ScanResponse(BaseModel):
     results: dict[EngineName, EngineResult]
 
 
+class URLScanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str = Field(
+        min_length=1,
+        max_length=8192,
+        repr=False,
+        description="Public HTTPS image URL, including a short-lived signed query if required. Never logged or returned.",
+    )
+    engines: list[EngineName] | None = Field(
+        None, min_length=1, max_length=3, description="Optional. Omit to execute every enabled engine."
+    )
+
+
 class Readiness(BaseModel):
     ready: bool
     engines: dict[EngineName, Literal["ready", "failed", "disabled"]]

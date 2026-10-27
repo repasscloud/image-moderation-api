@@ -1,11 +1,12 @@
 import asyncio
+import time
 from pathlib import PurePosixPath
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartParser, MultiPartException
 from app.errors import APIError
-from app.schemas import ErrorResponse, ScanResponse
+from app.schemas import ErrorResponse, ScanResponse, URLScanRequest
 
 router = APIRouter()
 BODY = {
@@ -20,7 +21,7 @@ BODY = {
                         "file": {"type": "string", "format": "binary"},
                         "engines": {
                             "type": "string",
-                            "description": "Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan.",
+                            "description": "Optional. Omit entirely to run all enabled engines. Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan. Do not send an empty field.",
                         },
                     },
                 }
@@ -61,18 +62,46 @@ async def perform_scan(request: Request, engine: str | None = None):
         filename = PurePosixPath((upload.filename or "").replace("\\", "/")).name[:255] or None
     finally:
         await form.close()
-    future = request.app.state.executor.submit(scanner.scan, data, filename, selected)
+    return await execute(request, scanner.scan, data, filename, selected)
+
+
+async def execute(request: Request, function, *args):
+    future = request.app.state.executor.submit(function, *args)
     request.scope["scan_future"] = future
     wrapped = asyncio.wrap_future(future)
-    # Consume late exceptions after a timeout/disconnect without logging their contents.
     wrapped.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
     try:
-        result = await asyncio.wait_for(asyncio.shield(wrapped), timeout=settings.scan_timeout_seconds)
+        result = await asyncio.wait_for(
+            asyncio.shield(wrapped), timeout=request.app.state.settings.scan_timeout_seconds
+        )
     except TimeoutError:
         raise APIError(
-            504, "scan_timeout", "Scan timed out; capacity remains occupied until inference finishes."
+            504, "scan_timeout", "Scan timed out; capacity remains occupied until work finishes."
         ) from None
     return JSONResponse(result, status_code=502 if result["status"] == "failed" else 200)
+
+
+def download_and_scan(scanner, downloader, url: str, selected: list[str]):
+    started = time.monotonic()
+    data = downloader.fetch(url)
+    result = scanner.scan(data, None, selected)
+    result["processing_time_ms"] = round((time.monotonic() - started) * 1000, 3)
+    return result
+
+
+@router.post(
+    "/v1/scan/url",
+    response_model=ScanResponse,
+    responses={**ERRORS, 502: {"model": ScanResponse | ErrorResponse}},
+    openapi_extra={"security": [{"BearerAuth": []}, {}]},
+    description="Download a public HTTPS image into memory and scan it. Engines are optional. Redirects and non-public destinations are blocked.",
+)
+async def scan_url(payload: URLScanRequest, request: Request):
+    scanner = request.app.state.scanner
+    selected = scanner.select(None if payload.engines is None else ",".join(payload.engines))
+    return await execute(
+        request, download_and_scan, scanner, request.app.state.downloader, payload.url, selected
+    )
 
 
 @router.post("/v1/scan", response_model=ScanResponse, responses=ERRORS, openapi_extra=BODY)

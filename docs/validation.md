@@ -57,3 +57,47 @@ not a Git repository. The reference scripts were inspected and retained unchange
 confidence values. That simple geometric fixture itself received a NudeNet
 anatomical detection, illustrating why predictions must not be treated as facts
 or automatic moderation decisions.
+
+## URL scanning update — 27 October 2026
+
+The original no-URL-fetching scope was superseded by the explicitly approved URL
+feature in docs/url-scanning-plan.md. POST /v1/scan/url now supports signed public
+HTTPS image URLs, an optional exact hostname allowlist, and the same engines,
+authentication, admission and in-memory validation as uploads.
+
+- 132 unit/API tests pass; the 2 pre-existing opt-in integration tests remain skipped.
+- Docker Compose rebuild/start and both model readiness checks passed on ARM64.
+- Real HTTPS retrieval of the public Python logo completed with both local engines
+  in 3522.097 ms on the final reviewed build. The response contained filename=null
+  and no source URL. This
+  verifies real DNS resolution, pinned-IP TCP, TLS certificate/SNI handling, streamed
+  download and model inference; it does not verify a customer's Worker or S3 token.
+- A temporary container with ALLOWED_IMAGE_HOSTS=www.python.org and API_KEY enabled
+  returned 401 without the key, 422 for a different hostname, and 200 with real
+  NudeNet inference for the allowed hostname and correct key. It was removed.
+- Mocked tests preserve a percent-encoded signed query exactly, reject redirects,
+  exercise IPv4/IPv6 and mixed public/private DNS answers, confirm the connector
+  receives a validated numeric IP, reject compressed HTTP content, enforce header
+  and streamed byte limits, and verify timeout capacity retention/cookie isolation.
+- Absolute network deadlines cover DNS/TCP/TLS/header/body operations, including
+  slow response headers. DNS uses a bounded dnspython lifetime; unreachable public
+  DNS answers fall back within the combined 5 second DNS/connect budget. Overall
+  scan timeouts retain admission while native inference finishes.
+- Live customer-signed Worker URLs, authenticated Shield and AMD64 execution remain
+  unverified. No downloaded image was sent to Shield or written to persistent disk.
+
+## Results interpretation documentation — 28 October 2026
+
+- Added a human-readable field/status/error reference, all 18 NudeNet labels and
+  explicit consumer nudity policy mechanics, separate Freepik cumulative scores,
+  and all current Shield classifications/unknown outcomes.
+- Added a machine-readable catalogue and copyable LLM instructions that keep
+  observed results, application thresholds and unknown checks separate.
+- Compared the catalogue with the installed NudeNet label list and Freepik enum;
+  all labels/categories match. Compared engine/overall status enums and 32 literal
+  raised error codes against the application; all are documented, along with the
+  generic inference_failed fallback.
+- Full suite: 132 passed, 2 opt-in integration tests skipped. No runtime behavior,
+  model weights, endpoint schemas or image-handling paths changed in this update.
+- The example 0.50 consumer cutoff is instructional, not a calibrated commercial
+  operating point. Live Shield verification remains outside this documentation check.

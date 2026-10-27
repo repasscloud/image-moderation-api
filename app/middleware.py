@@ -22,7 +22,7 @@ class ScanGuard:
                 raise APIError(503, "busy", "Scan capacity is full; retry later.")
             self.active += 1
             admitted = True
-            maximum = self.settings.max_image_bytes + 65536
+            maximum = 16384 if scope["path"] == "/v1/scan/url" else self.settings.max_image_bytes + 65536
             length = headers.get(b"content-length")
             if length:
                 try:

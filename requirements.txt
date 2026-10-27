@@ -17,6 +17,8 @@ charset-normalizer==3.5.2
     # via requests
 click==8.5.0
     # via uvicorn
+dnspython==2.9.0
+    # via -r requirements.in
 fastapi==0.162.0
     # via -r requirements.in
 filelock==4.2.4
@@ -37,7 +39,9 @@ h11==0.16.0
 hf-xet==1.7.0
     # via huggingface-hub
 httpcore==1.0.9
-    # via httpx
+    # via
+    #   -r requirements.in
+    #   httpx
 httpx==0.28.1
     # via -r requirements.in
 huggingface-hub==0.36.2
