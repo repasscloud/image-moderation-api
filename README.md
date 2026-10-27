@@ -40,7 +40,7 @@ are unset; otherwise secret values are used exactly, including any surrounding s
 No diagnostic endpoint returns configured values.
 
 | Variable | Default | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | API_KEY | unset | Optional Bearer key on **all four POST scanning endpoints** |
 | ARACHNID_API_USERNAME | unset | Shield Basic-auth username |
 | ARACHNID_API_PASSWORD | unset | Shield Basic-auth password |
@@ -81,7 +81,7 @@ The application's typed schemas and route metadata generate `/openapi.json`.
 ```
 
 | Method / endpoint | Behaviour |
-|---|---|
+| --- | --- |
 | GET /health | `{"status":"ok"}`; process liveness |
 | GET /ready | Engine readiness; 503 if an enabled engine failed initialization |
 | GET /v1/engines | Each engine's enabled and ready booleans |
@@ -136,7 +136,7 @@ strings are returned verbatim without a legal/policy conclusion. There are no au
 ### Status and errors
 
 | Status | Meaning |
-|---|---|
+| --- | --- |
 | completed | Every requested engine returned a result; engine-level: inference completed |
 | partial | At least one requested engine succeeded and at least one failed |
 | failed | Every requested engine failed; engine-level: no usable result |
