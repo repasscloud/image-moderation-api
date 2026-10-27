@@ -76,6 +76,149 @@
         }
       }
     },
+    "/v1/scan/url": {
+      "post": {
+        "summary": "Scan Url",
+        "description": "Download a public HTTPS image into memory and scan it. Engines are optional. Redirects and non-public destinations are blocked.",
+        "operationId": "scan_url_v1_scan_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/URLScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "Request Timeout",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request Entity Too Large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported Media Type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ScanResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ErrorResponse"
+                    }
+                  ],
+                  "title": "Response 502 Scan Url V1 Scan Url Post"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {}
+        ]
+      }
+    },
     "/v1/scan": {
       "post": {
         "summary": "Scan",
@@ -91,7 +234,7 @@
                   },
                   "engines": {
                     "type": "string",
-                    "description": "Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan."
+                    "description": "Optional. Omit entirely to run all enabled engines. Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan. Do not send an empty field."
                   }
                 },
                 "type": "object",
@@ -238,7 +381,7 @@
                   },
                   "engines": {
                     "type": "string",
-                    "description": "Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan."
+                    "description": "Optional. Omit entirely to run all enabled engines. Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan. Do not send an empty field."
                   }
                 },
                 "type": "object",
@@ -385,7 +528,7 @@
                   },
                   "engines": {
                     "type": "string",
-                    "description": "Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan."
+                    "description": "Optional. Omit entirely to run all enabled engines. Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan. Do not send an empty field."
                   }
                 },
                 "type": "object",
@@ -532,7 +675,7 @@
                   },
                   "engines": {
                     "type": "string",
-                    "description": "Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan."
+                    "description": "Optional. Omit entirely to run all enabled engines. Comma-separated: nudenet,nsfw,arachnid. Only on /v1/scan. Do not send an empty field."
                   }
                 },
                 "type": "object",
@@ -946,6 +1089,45 @@
           "results"
         ],
         "title": "ScanResponse"
+      },
+      "URLScanRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Url",
+            "description": "Public HTTPS image URL, including a short-lived signed query if required. Never logged or returned."
+          },
+          "engines": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "nudenet",
+                    "nsfw",
+                    "arachnid"
+                  ]
+                },
+                "type": "array",
+                "maxItems": 3,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engines",
+            "description": "Optional. Omit to execute every enabled engine."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "URLScanRequest"
       }
     },
     "securitySchemes": {

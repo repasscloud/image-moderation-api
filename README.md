@@ -2,7 +2,8 @@
 
 Standalone Python 3.12 / FastAPI service returning image analysis from NudeNet,
 Freepik NSFW Image Detector, and optional Project Arachnid Shield. CPU only; no
-application-specific policies, database, URL fetching, or filesystem scan endpoint.
+application-specific policies, database, or filesystem scan endpoint. URL scanning
+accepts public HTTPS images with optional exact hostname restrictions.
 Results are predictions and known-content matches, not permission or legality decisions.
 
 ## Run with Docker
@@ -41,7 +42,7 @@ No diagnostic endpoint returns configured values.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| API_KEY | unset | Optional Bearer key on **all four POST scanning endpoints** |
+| API_KEY | unset | Optional Bearer key on **all five POST scanning endpoints** |
 | ARACHNID_API_USERNAME | unset | Shield Basic-auth username |
 | ARACHNID_API_PASSWORD | unset | Shield Basic-auth password |
 | HOST | 0.0.0.0 | Container listening address; use 127.0.0.1 for native local use |
@@ -60,6 +61,8 @@ No diagnostic endpoint returns configured values.
 | NSFW_DTYPE | float32 | Portable CPU precision; bfloat16 is an opt-in matching the reference dtype |
 | MODEL_CACHE | model-cache | Native cache path; container uses /app/model-cache |
 | ENABLE_DOCS | true | Expose /docs and /openapi.json |
+| ALLOWED_IMAGE_HOSTS | unset | Comma-separated exact image hostnames; blank permits any public HTTPS host |
+| URL_DOWNLOAD_TIMEOUT_SECONDS | 30 | Absolute download deadline, 0–120 seconds; 5 second connect/read-idle limit |
 
 Without API_KEY startup logs warn that authentication is disabled and the service
 must stay private. With it, missing/invalid Bearer credentials get 401 using a
@@ -86,13 +89,14 @@ The application's typed schemas and route metadata generate `/openapi.json`.
 | GET /ready | Engine readiness; 503 if an enabled engine failed initialization |
 | GET /v1/engines | Each engine's enabled and ready booleans |
 | POST /v1/scan | All enabled engines, or comma-separated multipart `engines` selection |
+| POST /v1/scan/url | Download and scan a public HTTPS image; JSON `url` and optional `engines` list |
 | POST /v1/scan/nudenet | NudeNet only |
 | POST /v1/scan/nsfw | Freepik only |
 | POST /v1/scan/arachnid | Shield only; 422 if disabled |
 
-Upload one multipart field named `file`. JPEG, PNG and WebP are decoded and verified
+On upload routes, send one multipart field named `file`. JPEG, PNG and WebP are decoded and verified
 regardless of filename/MIME claims. Animated/multi-frame images are rejected.
-Optional `engines` is supported only by `/v1/scan`; empty, unknown or disabled
+The optional multipart `engines` string is supported only by `/v1/scan`; empty, unknown or disabled
 explicit selections return 422. All-disabled configuration is ready (nothing is
 loading), but scanning returns 503 because no engines are available.
 
@@ -133,6 +137,74 @@ It never sends the uploaded image. `no-known-match` means no known database matc
 **not proof of safety**. `csam`, `harmful-abusive-material`, `test`, and unknown future
 strings are returned verbatim without a legal/policy conclusion. There are no automatic retries.
 
+### Signed image URLs
+
+```sh
+curl -sS http://localhost:8080/v1/scan/url \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $API_KEY" \
+  --data '{"url":"https://images.example.com/photo.png?token=SHORT_LIVED_TOKEN"}'
+```
+
+Omit the Authorization header if API_KEY is unset. Omit `engines` to run every
+configured engine. To select engines, use a JSON list, for example
+`{"url":"https://images.example.com/photo.png?token=TOKEN","engines":["nudenet","nsfw"]}`.
+On the existing upload endpoint, `engines` remains an optional comma-separated
+multipart string. Omit it entirely rather than sending an empty value. Selection
+avoids unwanted computation; it does not balance requests across servers.
+
+For S3-compatible storage behind your image Worker, allowlist the Worker's exact
+hostname, rather than a provider's shared domain:
+
+```env
+ALLOWED_IMAGE_HOSTS=images.example.com,media.example.com
+URL_DOWNLOAD_TIMEOUT_SECONDS=30
+```
+
+The list is case-insensitive, comma-separated and exact: no wildcards, scheme,
+port, path, implicit subdomains or IP literals in configuration. Internationalized
+DNS names are normalized to ASCII IDNA. Blank/unset means **any public HTTPS host**;
+it never permits private-network access. Restart/recreate the service after changing
+configuration. Compose passes both settings through to the container.
+
+Only HTTPS on port 443 is accepted. URL credentials, fragments, whitespace/control
+characters, backslashes and redirects are rejected. Every resolved IPv4/IPv6
+address must be public; loopback, private, link-local, metadata/CGNAT, multicast,
+site-local and transition-address destinations are blocked. The TCP connector pins
+a checked numeric IP and keeps the original hostname for certificate verification
+and TLS SNI, preventing a second DNS lookup from rebinding the request. Connections
+are not pooled between downloads. Proxy environment variables are ignored; no API
+Bearer key or cookies are forwarded, and received cookies are discarded.
+
+The signed query string is preserved. Neither the URL nor its token is logged,
+echoed in an error, or returned as a filename (`filename` is null for URL scans).
+The response format is otherwise the same as uploads; total processing time
+includes download time. Downloads remain in memory and are released after work
+finishes; source objects in storage are never deleted. Keep tokens valid long
+enough to download the image; local inference can continue after token expiry.
+
+JSON requests are capped at 16 KiB and URLs at 8192 characters. Streamed download
+size uses MAX_IMAGE_SIZE_MB even when Content-Length is missing or false. All
+existing format, decoded-pixel and dimension checks also apply. HTTP-level
+Content-Encoding compression is rejected to bound decompression risk (normal PNG,
+JPEG and WebP image compression remains supported). Download deadlines apply at
+each TCP/TLS/header/body operation and include a 5 second idle-read limit. DNS resolution uses dnspython with a bounded lifetime within the combined
+5 second DNS/connect budget. Every A/AAAA answer is checked before connection,
+and unreachable public addresses fall back within that same budget. Overall scan
+timeout still bounds the response and retains capacity until native work returns.
+
+Errors are sanitized: 422 invalid/disallowed/non-public URL; 413 body/image limit;
+415 unsupported image/HTTP content encoding; 502 remote error, token expiry, redirect,
+DNS/connect/TLS failure; 504 download or overall scan timeout. No automatic retries
+or signed-URL refresh are performed. Restrict outbound traffic at the network layer
+as another deployment boundary. Use an allowlist for your commercial deployment.
+
+Implementation uses the documented [HTTPX custom transport](https://www.python-httpx.org/advanced/transports/)
+and [HTTPCore network backend](https://www.encode.io/httpcore/network-backends/)
+interfaces, with pinned HTTPX/HTTPCore versions and dnspython 2.9.0. DNS settings
+come from the container resolver configuration; OS hosts-file overrides and DNS
+search suffixes are not used for image downloads.
+
 ### Status and errors
 
 | Status | Meaning |
@@ -144,7 +216,8 @@ strings are returned verbatim without a legal/policy conclusion. There are no au
 | not_requested | Enabled engine was excluded by explicit selection |
 
 Completed and partial scans return 200. All-engine failure returns 502 with a scan
-response and per-engine errors. Other errors use
+response and per-engine errors. URL download failures also return 502, using the
+standard error envelope. Other errors use
 `{"error":{"code":"...","message":"..."}}`:
 400 malformed multipart/image; 401 bad/missing token; 408 upload timeout; 413 byte,
 pixel or dimension limit; 415 unsupported/animated image; 422 invalid selection or
@@ -161,7 +234,8 @@ CPU executor. Enabling more admitted scans permits a bounded waiting queue; it
 does not parallelize model access. Admission and authentication happen before
 body parsing. Multipart payloads are capped at the file limit plus 64 KiB overhead,
 kept in memory, and closed promptly. Images are never written to persistent storage.
-Only the model cache persists. Logs contain controlled events, not images,
+Only the model cache persists. URL downloads share this same admission limit and
+executor; a slow download cannot bypass upload capacity limits. Logs contain controlled events, not images,
 filenames, hashes, credentials or exception bodies.
 
 A native inference thread cannot safely be killed. A response timeout keeps its
@@ -199,7 +273,7 @@ HOST=127.0.0.1 .venv/bin/python -m app
 
 Unit tests inject model doubles and mock Shield HTTP transport; they do not require
 weights, real credentials or external image transmission. Install the lightweight
-API/settings/Pillow dependencies plus requirements-dev.txt to run just those tests.
+API/settings/Pillow/dnspython dependencies plus requirements-dev.txt to run just those tests.
 Real adapters are exercised separately in Docker with a generated harmless image.
 Optional integration tests:
 

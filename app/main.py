@@ -12,6 +12,7 @@ from app.logging_config import configure_logging
 from app.middleware import ScanGuard, SanitizedErrors
 from app.routes import health, scans
 from app.services.scanner import Scanner
+from app.services.downloads import ImageDownloader
 
 
 def create_app(settings: Settings | None = None, engines=None) -> FastAPI:
@@ -22,6 +23,8 @@ def create_app(settings: Settings | None = None, engines=None) -> FastAPI:
     async def lifespan(app: FastAPI):
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
         scanner = Scanner(settings, engines)
+        downloader = ImageDownloader(settings)
+        app.state.downloader = downloader
         app.state.settings, app.state.scanner, app.state.executor = settings, scanner, executor
         await asyncio.wrap_future(executor.submit(scanner.load))
         try:
@@ -29,6 +32,7 @@ def create_app(settings: Settings | None = None, engines=None) -> FastAPI:
         finally:
             # Queue cleanup behind any in-flight native work, then join the executor.
             await asyncio.wrap_future(executor.submit(scanner.close))
+            downloader.close()
             await asyncio.to_thread(executor.shutdown, wait=True, cancel_futures=True)
 
     app = FastAPI(
