@@ -1,5 +1,6 @@
 """Explicit setup step. Runtime uses only this pinned local snapshot."""
 
+import hashlib
 import os
 from pathlib import Path
 from huggingface_hub import snapshot_download
@@ -15,3 +16,10 @@ if __name__ == "__main__":
         allow_patterns=["config.json", "model.safetensors", "README.md"],
     )
     (cache / "freepik" / "REVISION").write_text(MODEL_REVISION + "\n")
+    model = cache / "freepik"
+    (model / "SHA256SUMS").write_text(
+        "".join(
+            f"{hashlib.sha256((model / name).read_bytes()).hexdigest()}  {name}\n"
+            for name in ("config.json", "model.safetensors", "REVISION")
+        )
+    )

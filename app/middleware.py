@@ -12,7 +12,9 @@ class ScanGuard:
         self.active = 0
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not scope["path"].startswith("/v1/scan"):
+        if scope["type"] != "http" or not (
+            scope["path"].startswith("/v1/scan") or scope["path"] == "/v1/process"
+        ):
             return await self.app(scope, receive, send)
         admitted = False
         try:

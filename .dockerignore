@@ -9,3 +9,8 @@ __pycache__
 model-cache
 outputs
 test-*.sh
+# Independent per-host runtime/deployment files must never enter build context.
+**/processor.env
+**/compose.env
+**/*.private.env
+deploy/vultr/control

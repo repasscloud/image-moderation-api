@@ -18,6 +18,11 @@ def ready(request: Request):
         for name, enabled in scanner.enabled.items()
     }
     is_ready = all(state != "failed" for state in engines.values())
+    if request.app.state.settings.enable_processing:
+        settings = request.app.state.settings
+        malware_ready = request.app.state.malware.ready()
+        engines["malware"] = "ready" if malware_ready else "failed"
+        is_ready = is_ready and malware_ready and not settings.processing_drain_file.exists()
     return JSONResponse({"ready": is_ready, "engines": engines}, status_code=200 if is_ready else 503)
 
 
