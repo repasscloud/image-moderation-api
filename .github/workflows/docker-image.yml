@@ -1,0 +1,113 @@
+# Build the processor image for linux/amd64 and push it to Docker Hub.
+#
+# The image contains NO runtime secrets. API_KEY, ARACHNID_API_USERNAME and
+# ARACHNID_API_PASSWORD are supplied when the container is started (Vultr:
+# private processor.env, see deploy/vultr/README.md). Deploy by digest
+# (PROCESSOR_IMAGE=...@sha256:...), never by a mutable tag.
+#
+# Create the Docker Hub repository as PRIVATE before the first push; a push to a
+# missing repository creates it with the namespace's default visibility.
+name: Docker image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional extra image tag (e.g. review-2026-11-09)"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: "Optional extra image tag"
+        required: false
+        type: string
+    secrets:
+      DOCKER_HUB_USERID:
+        required: true
+      DOCKER_HUB_PAT:
+        required: true
+    outputs:
+      digest:
+        description: "Pushed image index digest (sha256:...)"
+        value: ${{ jobs.build.outputs.digest }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      IMAGE_REPOSITORY: image-moderation-api
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERID }}
+          password: ${{ secrets.DOCKER_HUB_PAT }}
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: docker.io/${{ secrets.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+
+      - name: Build and push (linux/amd64)
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          pull: true
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify pushed platform
+        env:
+          IMAGE: docker.io/${{ secrets.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' \
+            | grep -Eq '"architecture": *"amd64"' \
+            || { echo "Pushed image has no linux/amd64 manifest" >&2; exit 1; }
+
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### Pushed ${IMAGE_REPOSITORY} (linux/amd64)"
+            echo
+            echo "Digest: \`${DIGEST}\`"
+            echo
+            echo "Set in Vultr compose.env: \`PROCESSOR_IMAGE=<namespace>/${IMAGE_REPOSITORY}@${DIGEST}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
