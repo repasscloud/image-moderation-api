@@ -256,3 +256,23 @@ def test_cross_repository_fixture_export(tmp_path):
         text=True,
     )
     assert again.returncode != 0
+
+
+@pytest.mark.parametrize("mode", ["P", "RGB", "L", "RGBA"])
+def test_transparent_png_pixels_are_composited_on_white(mode):
+    color = {"P": 0, "RGB": (255, 0, 0), "L": 0, "RGBA": (255, 0, 0, 0)}[mode]
+    with Image.new(mode, (640, 480), color) as original:
+        if mode == "P":
+            original.putpalette([255, 0, 0] + [0, 0, 0] * 255)
+        stream = io.BytesIO()
+        save = {"transparency": {"P": 0, "RGB": (255, 0, 0), "L": 0}[mode]} if mode != "RGBA" else {}
+        original.save(stream, "PNG", **save)
+    with TestClient(create_app(settings(), engines(), malware=Malware())) as client:
+        response = post(client, stream.getvalue())
+    assert response.status_code == 200
+    _, parts = decode(response)
+    for payload in parts.values():
+        with Image.open(io.BytesIO(payload)) as prepared:
+            pixel = prepared.convert("RGB").getpixel((prepared.width // 2, prepared.height // 2))
+            assert min(pixel) >= 250, (mode, pixel)
+            assert "transparency" not in prepared.info

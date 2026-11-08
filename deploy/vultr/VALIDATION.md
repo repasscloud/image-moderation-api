@@ -14,3 +14,10 @@ This is local evidence, not hosted acceptance or deployment approval.
 Not verified: AMD64 build/runtime, actual Vultr VMs/load balancer/TLS/firewall, peak throughput/latency/RAM/cost and one-host production capacity, production ClamAV definition freshness, live Shield authentication/provider-approved harmless match, model licensing clearance and full Swoovr media lifecycle cutover. The fresh independent review attempt hit an agent usage limit; no completed independent whole-branch review is claimed. Source/controller review and local tests are complete only to the scope above.
 
 Reproduce with the commands in [README](README.md). Use a harmless provider-approved fixture for any future live Shield acceptance; never abuse imagery. Do not stop or reuse managed application containers/volumes for these tests.
+
+
+## PR review follow-up — 9 November 2026
+
+Codex review of merged PR2 identified PNG palette/color-key transparency being lost during RGB conversion. Processing now normalises the EXIF-oriented image to RGBA before compositing onto white; transform recipe is `webp-2048-320-v2`. Four format regressions cover palette PNG, RGB/gray color-key PNG and existing RGBA alpha. The first three reproduced before the fix; all four pass after it. Full suite:169 passed,2 provider tests skipped; Ruff and Docker source build passed.
+
+The owner's publishing workflow on main is preserved. [Successful multi-platform build](https://github.com/repasscloud/image-moderation-api/actions/runs/42535592295) built source321dd43 and publishes to Docker Hub (`repasscloud/image-moderation-api`), using tags/manual releases. That published release predates this correction. Merge the follow-up fix and create a fresh image release, then use its immutable index digest on Vultr; a branch push alone does not publish this tag-triggered workflow. No existing image tag was replaced or release workflow triggered by this fix.

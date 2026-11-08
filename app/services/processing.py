@@ -28,7 +28,7 @@ def process(data, job, scanner, malware, settings):
         "sourceSha256": job.sourceSha256,
         "results": results,
         "variants": [],
-        "recipeVersion": "webp-2048-320-v1",
+        "recipeVersion": "webp-2048-320-v2",
     }
     if results["malware"].get("status") != "completed" or results["malware"].get("classification") != "clean":
         return manifest, {}
@@ -55,11 +55,10 @@ def process(data, job, scanner, malware, settings):
     variants = {}
     with Image.open(io.BytesIO(data)) as source:
         oriented = ImageOps.exif_transpose(source)
-        with Image.new("RGB", oriented.size, "white") as flattened:
-            if "A" in oriented.getbands():
-                flattened.paste(oriented, mask=oriented.getchannel("A"))
-            else:
-                flattened.paste(oriented.convert("RGB"))
+        # RGBA resolves palette transparency and PNG color-key metadata as well as alpha bands.
+        with oriented.convert("RGBA") as rgba, Image.new("RGB", oriented.size, "white") as flattened:
+            with rgba.getchannel("A") as alpha:
+                flattened.paste(rgba, mask=alpha)
             for name, side in (("display", 2048), ("thumbnail", 320)):
                 with flattened.copy() as variant:
                     variant.thumbnail((side, side), Image.Resampling.LANCZOS)
