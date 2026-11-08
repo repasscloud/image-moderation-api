@@ -233,3 +233,26 @@ def test_processing_openapi_declares_multipart_response():
     content = schema["paths"]["/v1/process"]["post"]["responses"]["200"]["content"]
     assert "multipart/form-data" in content
     assert "application/json" not in content
+
+
+def test_cross_repository_fixture_export(tmp_path):
+    import subprocess
+    import sys
+
+    output = tmp_path / "response"
+    result = subprocess.run(
+        [sys.executable, "scripts/export_processing_fixture.py", "--output", str(output)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert output.with_suffix(".bin").read_bytes()
+    assert json.loads(output.with_suffix(".json").read_text())["contentType"].startswith(
+        "multipart/form-data;"
+    )
+    again = subprocess.run(
+        [sys.executable, "scripts/export_processing_fixture.py", "--output", str(output)],
+        capture_output=True,
+        text=True,
+    )
+    assert again.returncode != 0

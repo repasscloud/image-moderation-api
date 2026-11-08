@@ -161,6 +161,17 @@ docker build --tag swoovr-image-processor:local .
 .venv/bin/python scripts/verify_processing_stack.py --image swoovr-image-processor:local
 ```
 
+To reproduce the cross-repository transport fixture without live providers:
+
+```sh
+.venv/bin/python scripts/export_processing_fixture.py --output /tmp/swoovr-processor-response
+# In the companion Swoovr checkout's workers/images directory:
+# PROCESSOR_RESPONSE_FIXTURE=/tmp/swoovr-processor-response npm test
+```
+
+The exporter refuses existing output files and uses explicit synthetic engines/image.
+It exercises the actual FastAPI multipart response, not provider accuracy.
+
 The readiness check uses synthetic engine readiness to test actual nonroot filesystem
 access/drain behaviour. The stack check starts owned disposable Docker resources, uses
 real clamd INSTREAM with a tiny synthetic EICAR definition database and real local model
