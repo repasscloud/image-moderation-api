@@ -1,4 +1,9 @@
-# Build the processor image for linux/amd64 and push it to Docker Hub.
+# Build the processor image for linux/amd64 and linux/arm64 and push it to
+# Docker Hub as one multi-platform image.
+#
+# Each platform is built on a native GitHub runner (no QEMU emulation) and
+# pushed by digest only; the merge job then publishes a single image index
+# under the final tags.
 #
 # The image contains NO runtime secrets. API_KEY, ARACHNID_API_USERNAME and
 # ARACHNID_API_PASSWORD are supplied when the container is started (Vultr:
@@ -11,8 +16,8 @@ name: Docker image
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    # Release tags only (vX.Y.Z). No branch pushes.
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
     inputs:
       tag:
@@ -26,14 +31,12 @@ on:
         required: false
         type: string
     secrets:
-      DOCKER_HUB_USERID:
-        required: true
       DOCKER_HUB_PAT:
         required: true
     outputs:
       digest:
-        description: "Pushed image index digest (sha256:...)"
-        value: ${{ jobs.build.outputs.digest }}
+        description: "Pushed multi-platform image index digest (sha256:...)"
+        value: ${{ jobs.merge.outputs.digest }}
 
 permissions:
   contents: read
@@ -42,14 +45,25 @@ concurrency:
   group: docker-image-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  DOCKER_HUB_USERID: repasscloud
+  IMAGE_REPOSITORY: image-moderation-api
+
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
-    env:
-      IMAGE_REPOSITORY: image-moderation-api
-    outputs:
-      digest: ${{ steps.push.outputs.digest }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            slug: linux-amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            slug: linux-arm64
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,52 +76,112 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          username: ${{ secrets.DOCKER_HUB_USERID }}
+          username: ${{ env.DOCKER_HUB_USERID }}
           password: ${{ secrets.DOCKER_HUB_PAT }}
 
-      - name: Image tags and labels
+      - name: Image labels
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: docker.io/${{ secrets.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
-          tags: |
-            type=sha,format=short,prefix=sha-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+          images: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
 
-      - name: Build and push (linux/amd64)
+      - name: Build and push by digest (${{ matrix.platform }})
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
           pull: true
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          tags: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           provenance: mode=max
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.slug }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.slug }}
 
-      - name: Verify pushed platform
-        env:
-          IMAGE: docker.io/${{ secrets.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}
-        run: |
-          docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' \
-            | grep -Eq '"architecture": *"amd64"' \
-            || { echo "Pushed image has no linux/amd64 manifest" >&2; exit 1; }
-
-      - name: Summary
+      - name: Export digest
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ matrix.slug }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish multi-platform image
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.inspect.outputs.digest }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ env.DOCKER_HUB_USERID }}
+          password: ${{ secrets.DOCKER_HUB_PAT }}
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+
+      - name: Create and push image index
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
+
+      - name: Inspect and verify platforms
+        id: inspect
+        env:
+          REF: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.meta.outputs.version }}
+        run: |
+          manifest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest}}')
+          for arch in amd64 arm64; do
+            jq -e --arg a "$arch" \
+              '[.manifests[] | select(.platform.os == "linux" and .platform.architecture == $a)] | length > 0' \
+              <<< "$manifest" > /dev/null \
+              || { echo "Pushed image has no linux/${arch} manifest" >&2; exit 1; }
+          done
+          echo "digest=$(jq -r .digest <<< "$manifest")" >> "$GITHUB_OUTPUT"
+
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.inspect.outputs.digest }}
+        run: |
           {
-            echo "### Pushed ${IMAGE_REPOSITORY} (linux/amd64)"
+            echo "### Pushed ${IMAGE_REPOSITORY} (linux/amd64, linux/arm64)"
             echo
-            echo "Digest: \`${DIGEST}\`"
+            echo "Index digest: \`${DIGEST}\`"
             echo
-            echo "Set in Vultr compose.env: \`PROCESSOR_IMAGE=<namespace>/${IMAGE_REPOSITORY}@${DIGEST}\`"
+            echo "Set in Vultr compose.env: \`PROCESSOR_IMAGE=${DOCKER_HUB_USERID}/${IMAGE_REPOSITORY}@${DIGEST}\`"
           } >> "$GITHUB_STEP_SUMMARY"
