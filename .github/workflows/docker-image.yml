@@ -31,6 +31,8 @@ on:
         required: false
         type: string
     secrets:
+      DOCKER_HUB_USERID:
+        required: true
       DOCKER_HUB_PAT:
         required: true
     outputs:
@@ -46,7 +48,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOCKER_HUB_USERID: repasscloud
+  DOCKER_HUB_NAMESPACE: repasscloud
   IMAGE_REPOSITORY: image-moderation-api
 
 jobs:
@@ -76,14 +78,14 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          username: ${{ env.DOCKER_HUB_USERID }}
+          username: ${{ secrets.DOCKER_HUB_USERID }}
           password: ${{ secrets.DOCKER_HUB_PAT }}
 
       - name: Image labels
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          images: docker.io/${{ env.DOCKER_HUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
 
       - name: Build and push by digest (${{ matrix.platform }})
         id: push
@@ -93,7 +95,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           pull: true
           labels: ${{ steps.meta.outputs.labels }}
-          tags: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          tags: docker.io/${{ env.DOCKER_HUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           provenance: mode=max
           sbom: true
@@ -136,14 +138,14 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          username: ${{ env.DOCKER_HUB_USERID }}
+          username: ${{ secrets.DOCKER_HUB_USERID }}
           password: ${{ secrets.DOCKER_HUB_PAT }}
 
       - name: Image tags
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          images: docker.io/${{ env.DOCKER_HUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
           tags: |
             type=sha,format=short,prefix=sha-
             type=semver,pattern={{version}}
@@ -153,7 +155,7 @@ jobs:
       - name: Create and push image index
         working-directory: ${{ runner.temp }}/digests
         env:
-          IMAGE: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}
+          IMAGE: docker.io/${{ env.DOCKER_HUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}
         run: |
           # shellcheck disable=SC2046
           docker buildx imagetools create \
@@ -163,7 +165,7 @@ jobs:
       - name: Inspect and verify platforms
         id: inspect
         env:
-          REF: docker.io/${{ env.DOCKER_HUB_USERID }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.meta.outputs.version }}
+          REF: docker.io/${{ env.DOCKER_HUB_NAMESPACE }}/${{ env.IMAGE_REPOSITORY }}:${{ steps.meta.outputs.version }}
         run: |
           manifest=$(docker buildx imagetools inspect "$REF" --format '{{json .Manifest}}')
           for arch in amd64 arm64; do
@@ -183,5 +185,5 @@ jobs:
             echo
             echo "Index digest: \`${DIGEST}\`"
             echo
-            echo "Set in Vultr compose.env: \`PROCESSOR_IMAGE=${DOCKER_HUB_USERID}/${IMAGE_REPOSITORY}@${DIGEST}\`"
+            echo "Set in Vultr compose.env: \`PROCESSOR_IMAGE=${DOCKER_HUB_NAMESPACE}/${IMAGE_REPOSITORY}@${DIGEST}\`"
           } >> "$GITHUB_STEP_SUMMARY"
