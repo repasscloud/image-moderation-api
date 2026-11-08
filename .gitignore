@@ -8,3 +8,8 @@ __pycache__/
 .ruff_cache/
 model-cache/
 outputs/
+
+# Per-host deployment state and runtime secrets are never committed.
+deploy/vultr/compose.env
+deploy/vultr/processor.env
+deploy/vultr/control/

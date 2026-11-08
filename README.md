@@ -366,3 +366,16 @@ docker compose exec -T moderation-api python - < scripts/verify_local_models.py
 
 The HTTP script uses a temporary localhost:8081 container for authentication checks
 and removes it afterwards. Keep Shield credentials absent for these local checks.
+
+## Independent Vultr image processor (Swoovr #294)
+
+The opt-in `/v1/process` endpoint inspects the original upload with local ClamAV,
+then validates and runs all three required engines, and prepares bounded private
+WebP versions in the same request. It returns findings and bytes, never a pass or
+publication decision. Existing `/v1/scan*` endpoints remain compatible.
+
+See [Vultr installation, rollout and contract](deploy/vultr/README.md). Processing
+requires `ENABLE_PROCESSING=true`, a nonblank `API_KEY`, both Shield credentials,
+and both local model engines enabled. Hosted readiness also checks local ClamAV
+and signature freshness. Worker authentication and Shield Basic authentication
+are distinct credentials. The stack runs independently of Swoovr web deployment.

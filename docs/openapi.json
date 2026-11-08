@@ -806,6 +806,75 @@
           {}
         ]
       }
+    },
+    "/v1/process": {
+      "post": {
+        "summary": "Processing",
+        "operationId": "processing_v1_process_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "job": {
+                    "type": "string",
+                    "description": "Strict ProcessingJob JSON, protocolVersion 1"
+                  }
+                },
+                "type": "object",
+                "required": [
+                  "file",
+                  "job"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Manifest JSON field plus zero or two bounded WebP file parts",
+            "content": {
+              "multipart/form-data": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid processor authentication"
+          },
+          "409": {
+            "description": "Source digest mismatch"
+          },
+          "413": {
+            "description": "Input or output resource limit exceeded"
+          },
+          "415": {
+            "description": "Unsupported image format or animation"
+          },
+          "422": {
+            "description": "Invalid job/form or image too small"
+          },
+          "503": {
+            "description": "Draining or capacity unavailable"
+          },
+          "504": {
+            "description": "Processing deadline exceeded; capacity retained until completion"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ]
+      }
     }
   },
   "components": {

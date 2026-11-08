@@ -10,12 +10,13 @@ from app.config import Settings
 from app.errors import APIError
 from app.logging_config import configure_logging
 from app.middleware import ScanGuard, SanitizedErrors
-from app.routes import health, scans
+from app.routes import health, scans, processing
+from app.services.clamav import ClamAV
 from app.services.scanner import Scanner
 from app.services.downloads import ImageDownloader
 
 
-def create_app(settings: Settings | None = None, engines=None) -> FastAPI:
+def create_app(settings: Settings | None = None, engines=None, malware=None) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
 
@@ -25,6 +26,7 @@ def create_app(settings: Settings | None = None, engines=None) -> FastAPI:
         scanner = Scanner(settings, engines)
         downloader = ImageDownloader(settings)
         app.state.downloader = downloader
+        app.state.malware = malware or ClamAV(settings)
         app.state.settings, app.state.scanner, app.state.executor = settings, scanner, executor
         await asyncio.wrap_future(executor.submit(scanner.load))
         try:
@@ -48,6 +50,7 @@ def create_app(settings: Settings | None = None, engines=None) -> FastAPI:
     app.add_middleware(SanitizedErrors)
     app.include_router(health.router)
     app.include_router(scans.router)
+    app.include_router(processing.router)
 
     @app.exception_handler(APIError)
     async def api_error(request: Request, exc: APIError):

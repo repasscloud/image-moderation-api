@@ -58,9 +58,12 @@ class Scanner:
             raise APIError(503, "no_engines", "No scanning engines are enabled.")
         return names
 
-    def scan(self, data: bytes, filename: str | None, selected: list[str]) -> dict:
+    def scan(
+        self, data: bytes, filename: str | None, selected: list[str], *, validated: bool = False
+    ) -> dict:
         started = time.monotonic()
-        validate_image(data, self.settings)
+        if not validated:
+            validate_image(data, self.settings)
         results = {}
         for name in NAMES:
             if not self.enabled[name]:

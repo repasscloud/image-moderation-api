@@ -1,0 +1,83 @@
+# Independent processor stack, one identical installation on EACH VM.
+# Use compose.env only for nonsecret deployment settings; processor.env is runtime-only.
+services:
+  processor:
+    image: ${PROCESSOR_IMAGE:?Set a reviewed immutable processor image digest}
+    init: true
+    restart: unless-stopped
+    env_file:
+      - path: ${PROCESSOR_ENV_FILE:?Set absolute path to private processor.env}
+        format: raw
+    environment:
+      ENABLE_PROCESSING: "true"
+      ENABLE_NUDENET: "true"
+      ENABLE_NSFW: "true"
+      ENABLE_DOCS: "false"
+      HOST: 0.0.0.0
+      PORT: "8080"
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+      PROCESSING_DRAIN_FILE: /run/processor-control/drain
+      MODEL_CACHE: /app/model-cache
+      MAX_IMAGE_SIZE_MB: "10"
+      MAX_IMAGE_PIXELS: "40000000"
+      MAX_IMAGE_DIMENSION: "8192"
+      MAX_CONCURRENT_SCANS: "1"
+      PROCESSING_MAX_OUTPUT_MB: "20"
+    ports:
+      # Bind only the chosen private/VPC interface; firewall permits LB/probes only.
+      - "${PROCESSOR_BIND_IP:?Set VM private interface address}:8080:8080"
+    volumes:
+      - model-cache:/app/model-cache
+      - type: bind
+        source: ${PROCESSOR_CONTROL_DIR:?Set absolute private control directory}
+        target: /run/processor-control
+        read_only: true
+    networks: [scanner, outbound]
+    depends_on: [clamav]
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: ${PROCESSOR_MEMORY:-4g}
+    cpus: ${PROCESSOR_CPUS:-2}
+    pids_limit: 128
+    stop_grace_period: 10m
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready',timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      start_period: 180s
+      retries: 3
+  clamav:
+    # Existing Swoovr-approved D336 digest, unmodified upstream image. Reassess vulnerabilities before release.
+    image: clamav/clamav@sha256:c21aa18cc0a358678255a3dfb343a4555b58f71b97d7b869df8fdf7ea0a5b4b1
+    restart: unless-stopped
+    environment:
+      CLAMD_CONF_TCPAddr: 0.0.0.0
+      CLAMD_CONF_StreamMaxLength: 10M
+      CLAMD_CONF_MaxFileSize: 10M
+      CLAMD_CONF_MaxScanSize: 40M
+      CLAMD_CONF_AlertExceedsMax: "yes"
+      CLAMD_CONF_ConcurrentDatabaseReload: "no"
+    # NEVER publish 3310. Only processor shares this internal network.
+    networks: [scanner, signatures]
+    volumes: [clamav-db:/var/lib/clamav]
+    mem_limit: ${CLAMAV_MEMORY:-4g}
+    cpus: ${CLAMAV_CPUS:-2}
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+networks:
+  scanner: {internal: true}
+  # Separate outbound networks prevent direct processor-scanner traffic except on scanner.
+  outbound: {}
+  signatures: {}
+volumes:
+  model-cache: {}
+  clamav-db: {}

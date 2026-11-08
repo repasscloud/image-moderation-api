@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -26,6 +26,27 @@ class Settings(BaseSettings):
     model_cache: Path = Path("model-cache")
     nsfw_dtype: Literal["float32", "bfloat16"] = "float32"
     enable_docs: bool = True
+    enable_processing: bool = False
+    clamav_host: str = "clamav"
+    clamav_port: int = Field(3310, ge=1, le=65535)
+    clamav_timeout_seconds: float = Field(30, gt=0, le=120)
+    clamav_max_signature_age_hours: int = Field(72, ge=1, le=168)
+    processing_min_side: int = Field(200, ge=1, le=8192)
+    processing_max_output_mb: int = Field(20, ge=1, le=40)
+    processing_drain_file: Path = Path("/run/processor-control/drain")
+
+    @model_validator(mode="after")
+    def processing_configuration(self):
+        if self.enable_processing and (
+            not self.api_key
+            or len(self.api_key.get_secret_value()) < 32
+            or not self.arachnid_enabled
+            or not self.enable_nudenet
+            or not self.enable_nsfw
+        ):
+            raise ValueError("Processing requires authentication and all mandatory engines")
+        return self
+
     allowed_image_hosts: Annotated[tuple[str, ...], NoDecode] = ()
     url_download_timeout_seconds: float = Field(30, gt=0, le=120)
 
