@@ -36,7 +36,39 @@ diagnose() {
     docker logs --tail 40 "$PROC" 2>&1 || true
 }
 
-sh "$ROOT/stack/stack.sh" "$ROOT/private/compose.env" up || { diagnose; exit 1; }
+# Ask clamd to reload its database (from the processor: 3310 is only on the internal network).
+clamd_reload() {
+    docker exec -i "$PROC" python - <<'PY' 2>&1 || true
+import socket
+with socket.create_connection(("clamav", 3310), timeout=15) as s:
+    s.sendall(b"zRELOAD\0")
+    print("clamd:", s.recv(1024).decode(errors="replace").strip("\0\r\n "))
+PY
+}
+
+# Poll /ready for up to $1 seconds; succeed on HTTP 200.
+wait_ready() {
+    _end=$(( $(date +%s) + $1 ))
+    while [ "$(date +%s)" -lt "$_end" ]; do
+        case "$(ready_report)" in '200 '*) return 0;; esac
+        sleep 10
+    done
+    return 1
+}
+
+if ! sh "$ROOT/stack/stack.sh" "$ROOT/private/compose.env" up; then
+    # Known first-boot race on a fresh volume: clamd loads the signatures baked into the
+    # ClamAV image (can be >72h old) while FreshClam downloads newer ones, and clamd isn't
+    # listening yet when FreshClam tries to notify it. A reload picks up the new database.
+    case "$(ready_report)" in
+        *'"malware":"failed"'*)
+            info 'ClamAV signatures not loaded yet (fresh-volume race). Asking clamd to reload...'
+            clamd_reload
+            wait_ready 180 || { diagnose; exit 1; }
+            ;;
+        *) diagnose; exit 1;;
+    esac
+fi
 
 report=$(ready_report)
 case "$report" in
