@@ -1,5 +1,14 @@
 # Image Moderation API
 
+[![Docker image](https://img.shields.io/github/actions/workflow/status/repasscloud/image-moderation-api/docker-image.yml?label=docker%20image&logo=githubactions&logoColor=white)](https://github.com/repasscloud/image-moderation-api/actions/workflows/docker-image.yml)
+[![Latest release](https://img.shields.io/github/v/tag/repasscloud/image-moderation-api?sort=semver&label=release)](https://github.com/repasscloud/image-moderation-api/tags)
+[![License: MIT](https://img.shields.io/github/license/repasscloud/image-moderation-api)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.162-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/docker-amd64%20%7C%20arm64-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Last commit](https://img.shields.io/github/last-commit/repasscloud/image-moderation-api)](https://github.com/repasscloud/image-moderation-api/commits/main)
+
 Standalone Python 3.12 / FastAPI service returning image analysis from NudeNet,
 Freepik NSFW Image Detector, and optional Project Arachnid Shield. CPU only; no
 application-specific policies, database, or filesystem scan endpoint. URL scanning
@@ -350,8 +359,10 @@ Pydantic, HTTPX, ONNX Runtime and timm use permissive licences; torch/torchvisio
 NumPy and Uvicorn have BSD-family terms; Pillow uses HPND and OpenCV Apache-2.0.
 Redistributors must retain applicable notices and verify all transitive/native
 licences in their final image. Shield access is subject to its account/service
-terms and quota. This project does not grant rights to third-party software/models
-or choose a licence for your newly authored application code on your behalf.
+terms and quota. This project's own application code is released under the
+[MIT License](LICENSE); that licence does not grant rights to third-party
+software/models, which remain under their own terms. See [CHANGELOG.md](CHANGELOG.md)
+for release history.
 
 ## Recorded validation
 
