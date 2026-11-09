@@ -21,6 +21,28 @@ not interpolated. Use a Docker Compose version supporting `env_file.format: raw`
 and verify with `docker compose version` and `config --quiet`. Do not print the
 resolved Compose config; it may expose environment values. Examples have no secrets.
 
+## Use the published multi-platform image
+
+The main branch now has the owner's GitHub Actions release workflow. It builds native
+linux/amd64 and linux/arm64 images and publishes their combined index to Docker Hub
+as `repasscloud/image-moderation-api`. A VM does not need to build the image itself.
+Take the immutable index digest from the successful workflow's job summary and set:
+
+```text
+PROCESSOR_IMAGE=docker.io/repasscloud/image-moderation-api@sha256:<published-index-digest>
+```
+
+For a private repository, authenticate Docker on each VM using the operator's registry
+pull identity (`docker login docker.io` interactively, or an approved secret-input
+mechanism). Never put the registry PAT in source, container image layers or command
+arguments. Then use the validated per-VM `stack.sh ... up` procedure below.
+
+The PNG transparency correction uses transform recipe `webp-2048-320-v2`. Previously
+published images do not acquire this fix automatically: merge its follow-up PR and
+run the existing version-tag/manual release workflow for the corrected source, then
+roll out the new digest one VM at a time. Branch pushes alone do not trigger this
+workflow. The publishing workflow is preserved unchanged by this fix.
+
 ## Build and release (operator, explicit steps)
 
 1. Review source, dependencies and model licences (existing NudeNet licence discrepancy
