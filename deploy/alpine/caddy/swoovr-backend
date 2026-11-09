@@ -104,10 +104,11 @@ $DOMAIN {
 
 	# Public health probes for uptime monitors. Each one is answered by a processor, so the
 	# status reflects the pool, not just Caddy. HEAD is turned into GET because the
-	# processors only route GET. GETs are idempotent, so a probe can retry on another
-	# backend within 5s.
+	# processors only route GET. GETs are idempotent, so a probe that cannot connect
+	# retries on another backend within 5s.
 	#   GET /health -> 200 if at least one processor is alive (/health), otherwise 503
-	#   GET /ready  -> 200 if at least one processor can take jobs (/ready), otherwise 503
+	#   GET /ready  -> 200 if at least one processor passes Caddy's /ready check (the same
+	#                  set that receives jobs), otherwise 503
 	@health {
 		method GET HEAD
 		path /health
@@ -136,6 +137,14 @@ $DOMAIN {
 	}
 	handle @ready {
 		method GET
+		# Readiness comes from the active /ready check, not from proxying /ready itself:
+		# a processor that has just started draining answers /ready with 503 straight
+		# away, but stays selectable until it fails two checks, and Caddy does not retry
+		# on a 503 response. So only processors that passed /ready can be picked, and
+		# the one picked is asked for /health (200 while it is alive). A drain on one
+		# processor never fails the probe while another is ready, and the probe goes
+		# 503 once no processor is in rotation, which is when jobs would fail too.
+		rewrite * /health
 		reverse_proxy $upstreams {
 			lb_policy round_robin
 			lb_try_duration 5s
@@ -148,6 +157,12 @@ $DOMAIN {
 			transport http {
 				dial_timeout 3s
 				response_header_timeout 5s
+			}
+
+			@alive status 2xx
+			handle_response @alive {
+				header Content-Type application/json
+				respond \`{"ready":true}\` 200
 			}
 		}
 	}

@@ -127,8 +127,10 @@ What the generated config does:
 - `POST /v1/process` is proxied, and so are two public health probes for uptime monitors
   (`GET` or `HEAD`):
   - `/health` returns 200 if at least one processor is alive, and 503 if none is.
-  - `/ready` returns 200 if at least one processor can take jobs, and 503 if all of them are
-    draining, failed or down.
+  - `/ready` returns `{"ready":true}` with 200 if at least one processor passes Caddy's
+    `/ready` check (the same set that receives jobs), and 503 once none does. Draining one
+    processor never fails it while another is ready. When the last one drains, it goes 503
+    within about 20s (two failed checks), which is when jobs would start failing too.
 
   A processor answers each probe, so the status reflects the pool, not just Caddy. Every
   other path, including `/docs` and `/v1/engines`, returns 404.
