@@ -3,12 +3,61 @@
 One installer for every VM. Run it, choose what the machine is, answer that role's questions.
 
 ```text
-Client ──HTTPS :443──▶ caddy-01 (public IP: Caddy + UFW)
-                           │  HTTP over the VPC, round-robin
-              ┌────────────┼────────────┐
-        img-app-01:8080  img-app-02:8080  …     (VPC IP only)
-        processor+ClamAV processor+ClamAV
+$ ./install.sh
+  1) image-moderation   processor + ClamAV (Docker), bound to the VPC IP
+  2) caddy              public HTTPS gateway, round-robin to the processors
 ```
+
+## Network layout
+
+Every VM has two network interfaces. The public one is for administration and outbound
+traffic. The VPC one carries traffic between Caddy and the processors. The IPs below are
+examples from a `10.19.96.0/20` VPC.
+
+```text
+                 Internet
+                    │  DNS A record: images.example.com → Caddy public IP
+                    ▼
+  ┌──────────── caddy-01 ─────────────┐
+  │ eth0  public IP   ← 80, 443, 22   │
+  │ eth1  10.19.96.10/20 (VPC)        │
+  └──────────────┬────────────────────┘
+                 │  HTTP :8080 over the VPC (10.19.96.0/20)
+        ┌────────┴────────┐
+  img-app-01          img-app-02
+  eth1 10.19.96.21    eth1 10.19.96.22   ← :8080 bound here only
+  eth0 public IP      eth0 public IP     ← SSH 22, image pulls, ClamAV updates
+```
+
+- **Caddy's public IP** is where the DNS record points. Port 443 serves HTTPS, port 80 is
+  needed for certificate issuance and renewal, and 22 is SSH.
+- **Caddy's VPC IP** is how it reaches each processor on `:8080`. Caddy needs no firewall rule
+  for this because outbound traffic is allowed by default.
+- **Each processor publishes 8080 only on its VPC IP.** It can't be reached through the
+  public IP even if a firewall rule were wrong. The processor's public IP is used for SSH,
+  Docker image pulls, ClamAV signature updates and Arachnid API calls.
+- **All VMs must be in the same VPC.** Caddy's VPC IP must fall inside the processors'
+  subnet. Run `ip -4 addr` on each VM before installing to confirm the VPC interface actually
+  has its address. Attaching it in the Vultr portal isn't always enough.
+
+### How a processor lets Caddy in
+
+Docker forwards published ports onto its own bridge network, so a normal `ufw allow` rule
+doesn't apply to them. The installer adds a **route** rule instead. The interface and subnet
+are derived from the bind IP you enter. For example, `10.19.96.21` on `eth1` with a `/20`
+prefix gives:
+
+```sh
+# gateway question left blank: allow the whole VPC subnet
+ufw route allow in on eth1 out on br+ from 10.19.96.0/20 to any port 8080 proto tcp
+
+# gateway question answered with 10.19.96.10: allow Caddy only
+ufw route allow in on eth1 out on br+ from 10.19.96.10 to any port 8080 proto tcp
+```
+
+The prefix is read from the interface, so a `/24` or `/16` VPC works the same way. Leaving
+the gateway question blank also lets you `curl :8080/ready` from other VPC machines while
+troubleshooting. Entering the gateway IP is tighter.
 
 ## 1. Build and copy the bundle
 
@@ -87,18 +136,50 @@ What the generated config does:
 - `grace_period 200s`: when the pool changes, requests already in flight finish on the old
   config.
 
-### Managing the pool
+### Adding and removing machines
+
+The processors Caddy sends traffic to are called the **pool**. The pool is a plain list of
+VPC IPs in `/etc/swoovr-caddy/backends`. You change it with `swoovr-backend` on the gateway:
 
 ```sh
-swoovr-backend list                    # members + /ready status
-swoovr-backend add 10.1.96.7           # adds only if its /ready returns 200 (--force to skip)
-swoovr-backend remove 10.1.96.5        # refuses to remove the last backend
-swoovr-backend replace 10.1.96.5 10.1.96.7   # new must be ready; one atomic swap
+swoovr-backend list                           # each machine and its /ready status
+swoovr-backend add 10.19.96.23                # only adds it if /ready returns 200 (--force overrides)
+swoovr-backend remove 10.19.96.21             # refuses to remove the last machine
+swoovr-backend replace 10.19.96.21 10.19.96.23   # swap one machine for another in a single reload
 ```
 
-Every change validates the generated Caddyfile, then runs `caddy reload`. If anything fails,
-the previous pool and Caddyfile are restored. Don't edit the Caddyfile by hand: `swoovr-backend`
-regenerates it from the pool file.
+What each command does:
+
+- **`list`** shows every machine in the pool and the HTTP code its `/ready` returns right
+  now. `200` means it's taking traffic. `503` means it's draining or its ClamAV signatures
+  are stale. `000` means it can't be reached, so check the VPC and that processor's UFW rule.
+- **`add <ip>`** puts a new machine into the round-robin. It first checks that the machine's
+  `/ready` returns 200, so a half-installed node or one that blocks Caddy is caught before any
+  traffic goes to it. `--force` skips the check. Caddy then keeps the machine out of rotation
+  until its health checks pass.
+- **`remove <ip>`** takes a machine out of the round-robin. It refuses to remove the last
+  machine, because that would leave the domain with nothing to serve it.
+- **`replace <old> <new>`** is `add` and `remove` in one step. The new machine must be ready,
+  and the swap happens in a single reload, so the pool never shrinks during the change.
+
+Every command follows the same safety steps:
+
+```text
+ write new pool + Caddyfile to temp files
+          │
+          ▼
+ caddy validate ── fails ──▶ discard temp files, nothing changes
+          │ ok
+          ▼
+ swap files in, caddy reload ── fails ──▶ put the previous pool + Caddyfile back
+          │ ok
+          ▼
+ new pool live, no restart. Requests already in flight get up to 200s
+ to finish on the old config (jobs can take 180s)
+```
+
+So removing a machine doesn't cut off its current jobs. Don't edit `/etc/caddy/Caddyfile` by
+hand: `swoovr-backend` regenerates it from the pool file and would overwrite your edits.
 
 **Replacing a processor (e.g. to upgrade it):**
 
@@ -107,8 +188,35 @@ regenerates it from the pool file.
 2. On the gateway, run `swoovr-backend replace <old-ip> <new-ip>`.
 3. Wait over 3 minutes for in-flight jobs to finish, then destroy the old VM.
 
+```text
+ before                      replace .21 → .23               after
+ ┌────────┐                  ┌────────┐                   ┌────────┐
+ │ caddy  │──▶ .21 ✓          │ caddy  │──▶ .21 (finishing)│ caddy  │──▶ .23 ✓
+ │        │──▶ .22 ✓          │        │──▶ .22 ✓          │        │──▶ .22 ✓
+ └────────┘                  │        │──▶ .23 ✓ new      └────────┘
+                             └────────┘                   destroy .21
+```
+
 To take a node out briefly without changing the pool, run `stack.sh … drain` on that node.
 Its `/ready` returns 503 and Caddy routes around it. Run `resume` to bring it back.
+
+## What has been tested
+
+These checks were run in **Alpine Linux 3.22** containers (BusyBox `ash`, the same shell the
+VMs use):
+
+| Area | Result |
+| --- | --- |
+| `shellcheck -s sh` on every script | Clean |
+| `swoovr-backend` against a real Caddy (Alpine package) and two dummy backends | `add`, `remove` and `replace` each reloaded the live config, confirmed through Caddy's admin API. Adding a duplicate or unreachable machine and removing the last one were refused with nothing changed. The lock was released after every command. |
+| Generated Caddyfile | `grace_period` live at 200s. Only `POST /v1/process` reaches a backend. `GET /v1/process` and `/ready` return 404. |
+| Installer prompts, driven through a terminal | Public, non-local and out-of-subnet IPs, a short `API_KEY`, an IP given as the domain, duplicate backends, and cancelling at the summary all stop the installer before anything changes. |
+| IP helpers | Validation, private-range checks and subnet maths (e.g. `10.19.96.37/20` → `10.19.96.0/20`) |
+| `bundle.sh` | The tarball contains the installer and the `deploy/vultr` stack files. |
+
+**Not yet tested:** a full install on fresh Vultr VMs. That covers Docker, UFW and the ClamAV
+steps, a real Let's Encrypt certificate, and failover (draining a processor, or running
+`replace` while a job is in flight).
 
 ## Security notes
 
