@@ -10,6 +10,7 @@ require_alpine
 require_tty
 
 role=${1-}
+[ "$#" -gt 0 ] && shift
 if [ -z "$role" ]; then
     info '' 'Swoovr image moderation — Alpine installer' '' \
         'What is this machine?' \
@@ -19,7 +20,7 @@ if [ -z "$role" ]; then
 fi
 
 case "$role" in
-    1|image-moderation) exec sh "$BASE/image-moderation/install.sh";;
-    2|caddy) exec sh "$BASE/caddy/install.sh";;
+    1|image-moderation) exec sh "$BASE/image-moderation/install.sh" "$@";;
+    2|caddy) exec sh "$BASE/caddy/install.sh" "$@";;
     *) die "Unknown selection: $role";;
 esac

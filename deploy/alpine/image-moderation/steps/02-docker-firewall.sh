@@ -23,6 +23,7 @@ mkdir -p /etc/sysctl.d
 printf '%s\n' 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-docker-forwarding.conf
 sysctl -w net.ipv4.ip_forward=1
 rc-service docker restart
+wait_for_docker
 
 if grep -q '^DEFAULT_FORWARD_POLICY=' /etc/default/ufw; then
     sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="DROP"/' /etc/default/ufw

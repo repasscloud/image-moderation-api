@@ -6,6 +6,35 @@ warn() { printf 'WARNING: %s\n' "$*" >&2; }
 info() { printf '%s\n' "$@"; }
 heading() { printf '\n== %s ==\n' "$*"; }
 
+# Exit code a step uses to say "reboot into the new kernel, then resume".
+# shellcheck disable=SC2034  # used by the scripts that source this file
+EXIT_REBOOT_REQUIRED=10
+
+# Alpine removes the old kernel's module files on upgrade (the directory itself can be
+# left behind), so the running kernel can't load what Docker needs until the VM reboots.
+# Canary: nft_chain_nat, which Docker's nftables NAT chains require.
+running_kernel_modules_missing() {
+    _d=/lib/modules/$(uname -r)
+    grep -q '/nft_chain_nat\.ko' "$_d/modules.builtin" 2>/dev/null && return 1
+    [ -d "$_d/kernel" ] || return 0
+    [ -z "$(find "$_d/kernel" -name 'nft_chain_nat.ko*' 2>/dev/null | head -n 1)" ]
+}
+
+# Wait for dockerd to answer; on failure show its log instead of failing later.
+wait_for_docker() {
+    _i=0
+    while [ "$_i" -lt 30 ]; do
+        docker info >/dev/null 2>&1 && return 0
+        _i=$((_i + 1))
+        sleep 1
+    done
+    warn 'Docker daemon did not come up within 30s. Last lines of /var/log/docker.log:'
+    tail -n 25 /var/log/docker.log >&2 2>/dev/null || true
+    running_kernel_modules_missing &&
+        warn "Kernel modules for the running kernel ($(uname -r)) are missing: reboot, then resume."
+    return 1
+}
+
 require_root() { [ "$(id -u)" -eq 0 ] || die 'Run as root.'; }
 require_tty() { [ -t 0 ] || die 'An interactive terminal is required.'; }
 require_alpine() { [ -f /etc/alpine-release ] || die 'This installer supports Alpine Linux only.'; }

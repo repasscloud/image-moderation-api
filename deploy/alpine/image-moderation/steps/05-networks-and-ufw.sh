@@ -14,6 +14,7 @@ ALLOW_FROM=$(conf_get "$CONF" ALLOW_FROM)
 EGRESS_IF=$(default_route_iface)
 [ -n "$EGRESS_IF" ] || die 'No default IPv4 route; cannot determine the internet-facing interface.'
 info "VPC interface: $VPC_IF   egress interface: $EGRESS_IF   8080 allowed from: $ALLOW_FROM"
+wait_for_docker
 
 # Creates containers and networks without starting anything.
 docker compose --env-file "$ROOT/private/compose.env" -f "$ROOT/stack/compose.yaml" \
