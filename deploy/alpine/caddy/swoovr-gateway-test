@@ -1,0 +1,21 @@
+#!/bin/sh
+# swoovr-gateway-test — check backends, DNS, Caddy and the public HTTPS path gate.
+set -eu
+SETTINGS=/etc/swoovr-caddy/gateway.env
+[ -r "$SETTINGS" ] || { echo 'Install the gateway first.' >&2; exit 1; }
+DOMAIN=$(awk -F= '$1 == "DOMAIN" { print substr($0, index($0, "=") + 1); exit }' "$SETTINGS")
+
+printf '== Backends ==\n'
+swoovr-backend list
+printf '\n== DNS for %s ==\n' "$DOMAIN"
+getent hosts "$DOMAIN" || echo '(no answer)'
+printf '\n== Caddy ==\n'
+rc-service caddy status || true
+caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null && echo 'Caddyfile valid'
+printf '\n== Public HTTPS ==\n'
+printf 'GET  /ready       (expect 404):      '
+curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 5 --max-time 20 "https://$DOMAIN/ready" || true
+printf 'POST /v1/process  (expect 401/403):  '
+curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 5 --max-time 20 -X POST "https://$DOMAIN/v1/process" || true
+printf '\n502/503 = no healthy backend. 200 on unauthenticated POST = security defect.\n'
+printf 'TLS errors: check the DNS A record, TCP 80/443 reachability and Caddy logs.\n'
