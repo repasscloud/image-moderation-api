@@ -132,8 +132,11 @@ What the generated config does:
     processor never fails it while another is ready. When the last one drains, it goes 503
     within about 20s (two failed checks), which is when jobs would start failing too.
 
-  A processor answers each probe, so the status reflects the pool, not just Caddy. Every
-  other path, including `/docs` and `/v1/engines`, returns 404.
+  A processor answers each probe, so the status reflects the pool, not just Caddy. A
+  processor that refuses connections or stalls is skipped and the probe retries another
+  (3s per attempt, 8s in total). When no processor can answer, the 503 arrives after about
+  8s, so set uptime-monitor timeouts to 10s or more. Every other path, including `/docs`
+  and `/v1/engines`, returns 404.
 - Requests go round-robin to all backends. Caddy probes `GET /ready` every 10s, so a backend
   returning 503 (draining or stale signatures) drops out of rotation after 2 failures and comes
   back after 2 passes.
