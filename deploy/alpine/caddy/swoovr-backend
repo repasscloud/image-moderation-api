@@ -102,7 +102,57 @@ $DOMAIN {
 		}
 	}
 
-	# /health, /ready, /v1/engines, /docs and everything else stay private.
+	# Public health probes for uptime monitors. Each one is answered by a processor, so the
+	# status reflects the pool, not just Caddy. HEAD is turned into GET because the
+	# processors only route GET. GETs are idempotent, so a probe can retry on another
+	# backend within 5s.
+	#   GET /health -> 200 if at least one processor is alive (/health), otherwise 503
+	#   GET /ready  -> 200 if at least one processor can take jobs (/ready), otherwise 503
+	@health {
+		method GET HEAD
+		path /health
+	}
+	handle @health {
+		method GET
+		reverse_proxy $upstreams {
+			lb_policy round_robin
+			lb_try_duration 5s
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+			health_status 200
+			health_fails 2
+			health_passes 2
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 5s
+			}
+		}
+	}
+
+	@ready {
+		method GET HEAD
+		path /ready
+	}
+	handle @ready {
+		method GET
+		reverse_proxy $upstreams {
+			lb_policy round_robin
+			lb_try_duration 5s
+			health_uri /ready
+			health_interval 10s
+			health_timeout 5s
+			health_status 200
+			health_fails 2
+			health_passes 2
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 5s
+			}
+		}
+	}
+
+	# /v1/engines, /docs and everything else stay private.
 	handle {
 		respond "Not Found" 404
 	}

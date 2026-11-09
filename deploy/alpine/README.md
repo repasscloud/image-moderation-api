@@ -124,8 +124,14 @@ is allowed. It checks that it has a route to each IP. It installs `caddy` and `u
 
 What the generated config does:
 
-- Only `POST /v1/process` is proxied. Every other path, including `/ready`, `/health` and
-  `/docs`, returns 404.
+- `POST /v1/process` is proxied, and so are two public health probes for uptime monitors
+  (`GET` or `HEAD`):
+  - `/health` returns 200 if at least one processor is alive, and 503 if none is.
+  - `/ready` returns 200 if at least one processor can take jobs, and 503 if all of them are
+    draining, failed or down.
+
+  A processor answers each probe, so the status reflects the pool, not just Caddy. Every
+  other path, including `/docs` and `/v1/engines`, returns 404.
 - Requests go round-robin to all backends. Caddy probes `GET /ready` every 10s, so a backend
   returning 503 (draining or stale signatures) drops out of rotation after 2 failures and comes
   back after 2 passes.
@@ -213,7 +219,7 @@ VMs use):
 | --- | --- |
 | `shellcheck -s sh` on every script | Clean |
 | `swoovr-backend` against a real Caddy (Alpine package) and two dummy backends | `add`, `remove` and `replace` each reloaded the live config, confirmed through Caddy's admin API. Adding a duplicate or unreachable machine and removing the last one were refused with nothing changed. The lock was released after every command. |
-| Generated Caddyfile | `grace_period` live at 200s. Only `POST /v1/process` reaches a backend. `GET /v1/process` and `/ready` return 404. |
+| Generated Caddyfile | `grace_period` live at 200s. Only `POST /v1/process` reaches a backend. `GET /v1/process` and `/ready` return 404 (before `/health` and `/ready` were made public). |
 | Installer prompts, driven through a terminal | Public, non-local and out-of-subnet IPs, a short `API_KEY`, an IP given as the domain, duplicate backends, and cancelling at the summary all stop the installer before anything changes. |
 | IP helpers | Validation, private-range checks and subnet maths (e.g. `10.19.96.37/20` → `10.19.96.0/20`) |
 | `bundle.sh` | The tarball contains the installer and the `deploy/vultr` stack files. |
@@ -226,7 +232,7 @@ Two processors and one gateway, on Alpine 3.24 in Sydney (4 vCPU / 8 GB processo
 | --- | --- |
 | Full install of both roles | Passed once three bugs this run found were fixed: the kernel upgrade breaking Docker until a reboot, stale ClamAV signatures on a fresh volume, and `/usr/local/sbin` missing on the gateway |
 | HTTPS | Let's Encrypt certificate issued automatically. HTTP redirects to HTTPS. |
-| Public surface | `/ready`, `/health` and `GET /v1/process` return 404. An unauthenticated POST returns 401. `:8080` is unreachable on public IPs. |
+| Public surface | `/docs` and `GET /v1/process` return 404. (Recorded before `/health` and `/ready` were made public.) An unauthenticated POST returns 401. `:8080` is unreachable on public IPs. |
 | Authenticated `POST /v1/process` | HTTP 200 with the full manifest, about 4.5–5s per image from a client in Australia. The bearer token passes through Caddy unchanged. |
 | Failover | Draining each processor in turn: its `/ready` went to 503, Caddy routed every request to the other one, and it rejoined after `resume`. |
 | Reboot | All three VMs came back healthy without manual steps. |

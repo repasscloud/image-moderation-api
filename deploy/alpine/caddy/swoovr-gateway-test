@@ -13,8 +13,12 @@ printf '\n== Caddy ==\n'
 rc-service caddy status || true
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null && echo 'Caddyfile valid'
 printf '\n== Public HTTPS ==\n'
-printf 'GET  /ready       (expect 404):      '
+printf 'GET  /health      (expect 200):      '
+curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 5 --max-time 20 "https://$DOMAIN/health" || true
+printf 'GET  /ready       (expect 200):      '
 curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 5 --max-time 20 "https://$DOMAIN/ready" || true
+printf 'GET  /docs        (expect 404):      '
+curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 5 --max-time 20 "https://$DOMAIN/docs" || true
 printf 'POST /v1/process  (expect 401/403):  '
 curl -sS -o /dev/null -w '%{http_code}\n' --connect-timeout 5 --max-time 20 -X POST "https://$DOMAIN/v1/process" || true
 printf '\n502/503 = no healthy backend. 200 on unauthenticated POST = security defect.\n'
