@@ -6,7 +6,7 @@ SETTINGS=/etc/swoovr-caddy/gateway.env
 DOMAIN=$(awk -F= '$1 == "DOMAIN" { print substr($0, index($0, "=") + 1); exit }' "$SETTINGS")
 
 printf '== Backends ==\n'
-swoovr-backend list
+/usr/local/sbin/swoovr-backend list
 printf '\n== DNS for %s ==\n' "$DOMAIN"
 getent hosts "$DOMAIN" || echo '(no answer)'
 printf '\n== Caddy ==\n'
