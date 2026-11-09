@@ -102,7 +102,81 @@ $DOMAIN {
 		}
 	}
 
-	# /health, /ready, /v1/engines, /docs and everything else stay private.
+	# Public health probes for uptime monitors. Each one is answered by a processor, so the
+	# status reflects the pool, not just Caddy. HEAD is turned into GET because the
+	# processors only route GET. GETs are idempotent, so a probe that cannot connect or
+	# gets no response retries on another backend. Each attempt is capped at 2s dial + 3s
+	# response inside an 8s retry budget, so one stalled processor (accepts the connection,
+	# never answers) is skipped rather than failing the probe, and max_fails/fail_duration
+	# keep it out of later probes for 30s while the active checks catch up.
+	#   GET /health -> 200 if at least one processor is alive (/health), otherwise 503
+	#   GET /ready  -> 200 if at least one processor passes Caddy's /ready check (the same
+	#                  set that receives jobs), otherwise 503
+	@health {
+		method GET HEAD
+		path /health
+	}
+	handle @health {
+		method GET
+		reverse_proxy $upstreams {
+			lb_policy round_robin
+			lb_try_duration 8s
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+			health_status 200
+			health_fails 2
+			health_passes 2
+			fail_duration 30s
+			max_fails 1
+
+			transport http {
+				dial_timeout 2s
+				response_header_timeout 3s
+			}
+		}
+	}
+
+	@ready {
+		method GET HEAD
+		path /ready
+	}
+	handle @ready {
+		method GET
+		# Readiness comes from the active /ready check, not from proxying /ready itself:
+		# a processor that has just started draining answers /ready with 503 straight
+		# away, but stays selectable until it fails two checks, and Caddy does not retry
+		# on a 503 response. So only processors that passed /ready can be picked, and
+		# the one picked is asked for /health (200 while it is alive). A drain on one
+		# processor never fails the probe while another is ready, and the probe goes
+		# 503 once no processor is in rotation, which is when jobs would fail too.
+		rewrite * /health
+		reverse_proxy $upstreams {
+			lb_policy round_robin
+			lb_try_duration 8s
+			health_uri /ready
+			health_interval 10s
+			health_timeout 5s
+			health_status 200
+			health_fails 2
+			health_passes 2
+			fail_duration 30s
+			max_fails 1
+
+			transport http {
+				dial_timeout 2s
+				response_header_timeout 3s
+			}
+
+			@alive status 2xx
+			handle_response @alive {
+				header Content-Type application/json
+				respond \`{"ready":true}\` 200
+			}
+		}
+	}
+
+	# /v1/engines, /docs and everything else stay private.
 	handle {
 		respond "Not Found" 404
 	}

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   packages and models keep their own terms; see the README).
 - README status badges.
 - This changelog.
+- Alpine gateway: public `GET`/`HEAD` `/health` and `/ready` probes for uptime
+  monitors, answered by the processor pool (503 when no processor is alive or
+  ready) instead of 404.
 
 ## [1.0.1] - 2026-11-09
 
