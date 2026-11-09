@@ -189,12 +189,16 @@ hand: `swoovr-backend` regenerates it from the pool file and would overwrite you
 3. Wait over 3 minutes for in-flight jobs to finish, then destroy the old VM.
 
 ```text
- before                      replace .21 → .23               after
- ┌────────┐                  ┌────────┐                   ┌────────┐
- │ caddy  │──▶ .21 ✓          │ caddy  │──▶ .21 (finishing)│ caddy  │──▶ .23 ✓
- │        │──▶ .22 ✓          │        │──▶ .22 ✓          │        │──▶ .22 ✓
- └────────┘                  │        │──▶ .23 ✓ new      └────────┘
-                             └────────┘                   destroy .21
+ before:   caddy ──▶ .21, .22
+              │
+              │  swoovr-backend replace 10.19.96.21 10.19.96.23
+              ▼
+ during:   caddy ──▶ .23, .22    new requests
+                 ╌╌▶ .21          only finishes jobs it already had (up to 200s)
+              │
+              │  wait 3+ minutes, then destroy .21
+              ▼
+ after:    caddy ──▶ .23, .22
 ```
 
 To take a node out briefly without changing the pool, run `stack.sh … drain` on that node.
