@@ -218,9 +218,21 @@ VMs use):
 | IP helpers | Validation, private-range checks and subnet maths (e.g. `10.19.96.37/20` → `10.19.96.0/20`) |
 | `bundle.sh` | The tarball contains the installer and the `deploy/vultr` stack files. |
 
-**Not yet tested:** a full install on fresh Vultr VMs. That covers Docker, UFW and the ClamAV
-steps, a real Let's Encrypt certificate, and failover (draining a processor, or running
-`replace` while a job is in flight).
+### UAT on real Vultr VMs
+
+Two processors and one gateway, on Alpine 3.24 in Sydney (4 vCPU / 8 GB processors):
+
+| Check | Result |
+| --- | --- |
+| Full install of both roles | Passed once three bugs this run found were fixed: the kernel upgrade breaking Docker until a reboot, stale ClamAV signatures on a fresh volume, and `/usr/local/sbin` missing on the gateway |
+| HTTPS | Let's Encrypt certificate issued automatically. HTTP redirects to HTTPS. |
+| Public surface | `/ready`, `/health` and `GET /v1/process` return 404. An unauthenticated POST returns 401. `:8080` is unreachable on public IPs. |
+| Authenticated `POST /v1/process` | HTTP 200 with the full manifest, about 4.5–5s per image from a client in Australia. The bearer token passes through Caddy unchanged. |
+| Failover | Draining each processor in turn: its `/ready` went to 503, Caddy routed every request to the other one, and it rejoined after `resume`. |
+| Reboot | All three VMs came back healthy without manual steps. |
+
+**Not yet tested:** `swoovr-backend replace` while a job is in flight. This needs a third
+processor and will be tested when one is added.
 
 ## Security notes
 
